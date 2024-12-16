@@ -1,0 +1,118 @@
+version: "3.9"
+services:
+    zookeeper:
+        image: "bitnami/zookeeper:latest"
+        container_name: zookeeper2
+        ports:
+            - "2181:2181"
+        environment:
+            - ALLOW_ANONYMOUS_LOGIN=yes
+
+    kafka:
+        image: "bitnami/kafka:latest"
+        container_name: kafka2
+        ports:
+            - "9092:9092"
+            - "29092:29092"
+        environment:
+            - KAFKA_BROKER_ID=1
+            - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+            - ALLOW_PLAINTEXT_LISTENER=yes
+            - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+            - KAFKA_CFG_LISTENERS=CLIENT://:9092,EXTERNAL://:29092
+            - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka:9092,EXTERNAL://localhost:29092
+            - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=CLIENT
+        depends_on:
+            - zookeeper
+
+    spark:
+        container_name: spark2
+        image: docker.io/bitnami/spark:latest
+        environment:
+            - SPARK_MODE=master
+        ports:
+            - "8080:8080"
+
+    spark-worker:
+        image: docker.io/bitnami/spark:latest
+        environment:
+            - SPARK_MODE=worker
+            - SPARK_MASTER_URL=spark://spark:7077
+
+    namenode:
+        image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+        container_name: namenode2
+        restart: always
+        ports:
+            - 9871:9870
+            - 9001:9000
+        volumes:
+            - hadoop_namenode:/hadoop/dfs/name
+            - ./data:/data
+        environment:
+            - CLUSTER_NAME=test
+        env_file:
+            - ./hadoop.env
+
+    datanode:
+        image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+        container_name: datanode2
+        restart: always
+        volumes:
+            - hadoop_datanode:/hadoop/dfs/data
+        environment:
+            SERVICE_PRECONDITION: "namenode:9870"
+        env_file:
+            - ./hadoop.env
+
+    resourcemanager:
+        image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+        container_name: resourcemanager2
+        restart: always
+        environment:
+            SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
+        env_file:
+            - ./hadoop.env
+
+    nodemanager:
+        image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+        container_name: nodemanager2
+        restart: always
+        environment:
+            SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+        env_file:
+            - ./hadoop.env
+
+    historyserver:
+        image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+        container_name: historyserver2
+        restart: always
+        environment:
+            SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+        volumes:
+            - hadoop_historyserver:/hadoop/yarn/timeline
+        env_file:
+            - ./hadoop.env
+
+    producer:
+        build: ./kafka-producer
+        container_name: producer2
+        image: producer
+        restart: unless-stopped
+        volumes:
+            - appdata:/var/www
+
+        depends_on:
+            - kafka
+
+volumes:
+    hadoop_namenode:
+    hadoop_datanode:
+    hadoop_historyserver:
+    appdata:
+
+
+networks:
+    default:
+        external:
+            name: bde2

@@ -1,0 +1,26 @@
+
+docker network create bde2
+
+docker-compose up -d
+
+docker cp data.csv namenode2:/data
+docker exec -it namenode2 bash
+hdfs dfs -mkdir /dir
+hdfs dfs -put data/data.csv /dir
+
+docker exec -it kafka2 bash
+kafka-topics.sh --create --bootstrap-server localhost:9092 --topic minnhen-fcd
+kafka-topics.sh --create --bootstrap-server localhost:9092 --topic minnhen-emission
+
+kafka-topics.sh --list --bootstrap-server localhost:9092
+
+docker build --rm -t models-app .
+docker run --net bde2 --rm --name models models-app
+
+docker build --rm -t streaming-app .
+docker run --net bde2 --rm --name spark-streaming streaming-app
+
+docker exec -it namenode2 bash
+hadoop fs -getmerge /output/claster /data/claster.csv
+hadoop fs -getmerge /output/predicted /data/predicted.csv
+
